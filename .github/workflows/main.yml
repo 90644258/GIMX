@@ -1,53 +1,37 @@
-name: Build GIMX for Armbian arm64
+name: Build GIMX for Armbian Bookworm (arm64)
 
 on:
   push:
     branches: [ "master" ]
-  pull_request:
-    branches: [ "master" ]
   workflow_dispatch:
-
-env:
-  DEB_NAME: gimx-arm64-bookworm
-  BUILD_DIR: /workspace
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - container: "arm64v8/debian:bookworm"
-            platform: "linux/arm64"
-
+    env:
+      DEB_NAME: gimx-8.0-bookworm-arm64
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-qemu-action@v3
         with:
-          platforms: linux/arm64
+          platforms: arm64
 
-      - name: Build inside Debian Bookworm arm64 container
+      - name: Build inside arm64 Debian Bookworm container
         run: |
           docker run --rm \
-            --platform ${{ matrix.platform }} \
-            -v ${{ github.workspace }}:${{ env.BUILD_DIR }} \
-            -w ${{ env.BUILD_DIR }} \
-            ${{ matrix.container }} \
+            --platform linux/arm64 \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace \
+            arm64v8/debian:bookworm \
             bash -c '
               set -e
-
-              # 更新并安装编译依赖
               apt-get update
               apt-get install -y --no-install-recommends \
-                build-essential \
-                git \
-                pkg-config \
-                libwxgtk3.0-gtk3-dev \
+                build-essential git pkg-config \
+                libwxgtk3.2-dev \
                 libbluetooth-dev \
                 libxml2-dev \
                 libusb-1.0-0-dev \
@@ -61,44 +45,30 @@ jobs:
                 libavahi-client-dev \
                 libffi-dev \
                 libxcb1-dev \
-                libxcb-util0-dev \
-                ca-certificates
-
-              # 编译与安装到临时目录
-              make -j$(nproc) PREFIX=/usr
-              make install PREFIX=/usr DESTDIR=${{ env.BUILD_DIR }}/install
+                libxcb-util0-dev
+              make -j$(nproc)
+              make install DESTDIR=/workspace/install
             '
 
-      - name: Create DEB package
+      - name: Package as .deb
         run: |
-          INSTALL_DIR="${{ github.workspace }}/install"
-          DEB_DIR="${{ github.workspace }}/deb-package"
-          
-          mkdir -p "${DEB_DIR}/DEBIAN"
-          mkdir -p "${DEB_DIR}/usr"
-          
-          # 拷贝安装的文件
-          cp -r "${INSTALL_DIR}/usr/"* "${DEB_DIR}/usr/"
-          
-          # 创建 DEB 控制文件
-          cat > "${DEB_DIR}/DEBIAN/control" << EOF
+          mkdir -p deb/DEBIAN
+          cp -r install/usr deb/
+          cat > deb/DEBIAN/control << 'EOF'
           Package: gimx
-          Version: 8.0.0-armbian-bookworm-arm64
+          Version: 8.0-1
+          Architecture: arm64
+          Maintainer: GIMX Community
+          Description: Game Input MultipleXer for Armbian Bookworm
+           GIMX lets you use a computer as a hub for gaming devices
+           and control consoles (PlayStation, Xbox) via USB or Bluetooth.
+          Depends: libc6, libwxgtk3.2-1, libbluetooth3, libxml2, libusb-1.0-0, libncursesw6, libmhash2, libcurl3-gnutls, libxi6, libx11-6, libgudev-1.0-0, libavahi-client3, libffi8
           Section: utils
           Priority: optional
-          Architecture: arm64
-          Depends: libwxgtk3.0-gtk3-0v5, libbluetooth3, libxml2, libusb-1.0-0, libncursesw6, libmhash2, libcurl3-gnutls, libxi6, libx11-6, libgudev-1.0-0, libavahi-client3, libffi8
-          Maintainer: GitHub Actions Build
-          Description: Game Input MultipleXer for Armbian (Debian Bookworm arm64)
-           GIMX allows using a computer as a hub for gaming devices.
-           This package is built specifically for Armbian Bookworm Server arm64.
           EOF
-          
-          # 构建 DEB 包
-          dpkg-deb --build "${DEB_DIR}" "${{ env.DEB_NAME }}.deb"
+          dpkg-deb --build deb ${DEB_NAME}.deb
 
-      - name: Upload DEB artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.DEB_NAME }}
-          path: ${{ env.DEB_NAME }}.deb
+          name: gimx-bookworm-arm64-deb
+          path: ./*.deb
