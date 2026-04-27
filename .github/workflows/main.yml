@@ -62,8 +62,7 @@ jobs:
           Description: Game Input MultipleXer for Armbian Bookworm
            GIMX lets you use a computer as a hub for gaming devices
            and control consoles (PlayStation, Xbox) via USB or Bluetooth.
-          Depends: libc6, libwxgtk3.2-1, libbluetooth3, libxml2, libusb-1.0-0, libncursesw6, libmhash2, libcurl3-gnutls, libxi6, libx11-6, libgudev-1.0-0, libavahi-client3, libffi8
-          Section: utils
+          Depends: libc6, libbluetooth3, libusb-1.0-0, libncursesw6, libcurl3-gnutls, libx11-6, libavahi-client3, libffi8
           Priority: optional
           EOF
           dpkg-deb --build deb ${DEB_NAME}.deb
