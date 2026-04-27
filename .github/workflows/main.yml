@@ -1,0 +1,132 @@
+name: Build GIMX arm64 Package
+
+on:
+  push:
+    branches: [ "master" ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+jobs:
+  build-arm64:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ubuntu_version: ["20.04"]  # 使用 20.04 LTS 兼容性最好
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/arm64
+
+      - name: Build in arm64 container
+        run: |
+          docker run --rm \
+            --platform linux/arm64 \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace \
+            arm64v8/ubuntu:${{ matrix.ubuntu_version }} \
+            bash -c '
+              # 使脚本遇错即停
+              set -e
+
+              # 设置时区为非交互模式，避免安装 tzdata 时卡住
+              export DEBIAN_FRONTEND=noninteractive
+              ln -fs /usr/share/zoneinfo/Etc/UTC /etc/localtime
+              apt-get update && apt-get install -y tzdata
+
+              # 安装编译工具链
+              apt-get install -y build-essential git pkg-config
+
+              # 安装 GIMX 所需依赖库
+              apt-get install -y \
+                libwxgtk3.0-gtk3-dev \
+                libbluetooth-dev \
+                libxml2-dev \
+                libusb-1.0-0-dev \
+                libncurses-dev \
+                gettext \
+                libmhash-dev \
+                libcurl4-gnutls-dev \
+                libxi-dev \
+                libx11-dev \
+                libgudev-1.0-dev \
+                libavahi-client-dev \
+                libffi-dev \
+                libxcb1-dev \
+                libxcb-util0-dev
+
+              # 创建安装目标目录
+              mkdir -p /workspace/install
+
+              # 编译 GIMX（-j$(nproc) 使用所有可用核心加速）
+              make -j$(nproc) PREFIX=/usr
+
+              # 安装到临时目录
+              make install PREFIX=/usr DESTDIR=/workspace/install
+
+              echo "Build completed successfully!"
+            '
+
+      - name: Create DEB package structure
+        run: |
+          # 创建 .deb 包所需的目录结构
+          DEB_ROOT="${{ github.workspace }}/deb-package"
+          INSTALL_DIR="${{ github.workspace }}/install"
+
+          mkdir -p "${DEB_ROOT}/DEBIAN"
+          mkdir -p "${DEB_ROOT}/usr"
+
+          # 拷贝编译好的文件
+          cp -r "${INSTALL_DIR}"/usr/* "${DEB_ROOT}/usr/"
+
+          # 创建 DEB 控制文件
+          cat > "${DEB_ROOT}/DEBIAN/control" << EOF
+          Package: gimx
+          Version: 8.0.0-${{ github.ref_name }}-arm64
+          Section: utils
+          Priority: optional
+          Architecture: arm64
+          Depends: libwxgtk3.0-gtk3-0v5, libbluetooth3, libxml2, libusb-1.0-0, libncurses6, libmhash2, libcurl3-gnutls, libxi6, libx11-6, libgudev-1.0-0, libavahi-client3, libffi7
+          Maintainer: ${{ github.repository_owner }}
+          Description: Game Input MultipleXer - Use your computer as a hub for gaming devices
+           GIMX allows you to use a computer's mouse and keyboard or gaming wheel
+           to control a gaming console (PlayStation, Xbox) via a USB adapter or Bluetooth.
+          EOF
+
+          # 创建 postinst 脚本（安装后执行）
+          cat > "${DEB_ROOT}/DEBIAN/postinst" << 'EOF'
+          #!/bin/sh
+          set -e
+          # 如果需要添加 udev 规则或其他安装后操作，可在此处添加
+          echo "GIMX has been installed. Please ensure you have the compatible USB adapter."
+          EOF
+
+          chmod 755 "${DEB_ROOT}/DEBIAN/postinst"
+
+      - name: Build DEB package
+        run: |
+          dpkg-deb --build "${{ github.workspace }}/deb-package" gimx-arm64.deb
+
+      - name: Create compressed tarball
+        run: |
+          tar -czf gimx-arm64.tar.gz -C "${{ github.workspace }}/install" .
+
+      - name: Upload DEB package
+        uses: actions/upload-artifact@v4
+        with:
+          name: gimx-arm64-deb-${{ matrix.ubuntu_version }}
+          path: gimx-arm64.deb
+
+      - name: Upload Tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: gimx-arm64-tarball-${{ matrix.ubuntu_version }}
+          path: gimx-arm64.tar.gz
