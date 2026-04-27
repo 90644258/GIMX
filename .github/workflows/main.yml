@@ -7,15 +7,15 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       DEB_NAME: gimx-8.0-bookworm-arm64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.3.0
         with:
           submodules: recursive
 
-      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-qemu-action@v3.6.0
         with:
           platforms: arm64
 
@@ -42,7 +42,6 @@ jobs:
                 libxi-dev \
                 libx11-dev \
                 libgudev-1.0-dev \
-                libavahi-client-dev \
                 libffi-dev \
                 libxcb1-dev \
                 libxcb-util0-dev
@@ -62,12 +61,13 @@ jobs:
           Description: Game Input MultipleXer for Armbian Bookworm
            GIMX lets you use a computer as a hub for gaming devices
            and control consoles (PlayStation, Xbox) via USB or Bluetooth.
-          Depends: libc6, libbluetooth3, libusb-1.0-0, libncursesw6, libcurl3-gnutls, libx11-6, libavahi-client3, libffi8
+          Depends: libc6, libbluetooth3, libusb-1.0-0, libncursesw6, libcurl3-gnutls, libx11-6, libffi8
+          Section: utils
           Priority: optional
           EOF
           dpkg-deb --build deb ${DEB_NAME}.deb
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4.6.2
         with:
           name: gimx-bookworm-arm64-deb
           path: ./*.deb
