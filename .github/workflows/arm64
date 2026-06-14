@@ -1,0 +1,46 @@
+name: Build GIMX for arm64
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential cmake libusb-1.0-0-dev libbluetooth-dev \
+            libncurses-dev libxml2-dev libsdl2-dev libconfig-dev gettext \
+            libwxgtk3.2-dev pkg-config
+
+      - name: Build
+        run: |
+          mkdir build && cd build
+          cmake .. -DWITH_BLUETOOTH=1 -DWITH_SDL2=1 -DCMAKE_BUILD_TYPE=Release
+          make -j$(nproc)
+
+      - name: Package
+        run: |
+          cd build
+          mkdir -p gimx-arm64/DEBIAN
+          make install DESTDIR=$(pwd)/gimx-arm64
+          # 写一个简单的 deb 控制文件
+          cat > gimx-arm64/DEBIAN/control << EOF
+          Package: gimx
+          Version: 8.0-1
+          Architecture: arm64
+          Maintainer: DIY
+          Description: GIMX - Game Input MultipleXer
+          EOF
+          dpkg-deb --build gimx-arm64
+          mv gimx-arm64.deb ../gimx_8.0-1_arm64.deb
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gimx-arm64-deb
+          path: gimx_8.0-1_arm64.deb
